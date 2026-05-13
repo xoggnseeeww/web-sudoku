@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Professional Web Sudoku</title>
+    <!-- Confetti 애니메이션 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         :root {
             --bg-color: #f8fafc;
@@ -15,6 +17,7 @@
             --error: #ef4444;
             --selected: #dbeafe;
             --highlight: #f1f5f9;
+            --highlight-sync: #fef08a; /* 동기화 하이라이트 (노란색) */
         }
 
         body {
@@ -30,7 +33,6 @@
         .container { max-width: 450px; width: 100%; }
         .header { text-align: center; margin-bottom: 20px; }
         
-        /* 화면 전환(Routing) 처리 */
         .screen { display: none; flex-direction: column; align-items: center; width: 100%; }
         .screen.active { display: flex; }
 
@@ -46,10 +48,16 @@
             width: 100%;
             max-width: 200px;
             transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
         .btn:hover, .btn:active { background: var(--highlight); }
-        .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
-        .btn.primary:hover { background: #2563eb; }
+        .btn.active-toggle { background: var(--accent); color: white; border-color: var(--accent); }
+
+        .stamp { color: #16a34a; font-weight: 800; font-size: 1.1rem; }
+        .record-text { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
 
         .level-grid {
             display: grid;
@@ -59,7 +67,10 @@
             max-width: 300px;
         }
 
-        /* 스도쿠 보드 레이아웃 */
+        /* 진행률 표시줄 */
+        .progress-container { width: 100%; background: #e2e8f0; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 15px; }
+        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
+
         .sudoku-grid {
             display: grid;
             grid-template-columns: repeat(9, 1fr);
@@ -71,9 +82,9 @@
         }
 
         .cell {
-            aspect-ratio: 1 / 1; /* 사이즈 변동 원천 차단 */
+            aspect-ratio: 1 / 1;
             box-sizing: border-box;
-            touch-action: manipulation; /* 모바일 더블 탭 확대 방지 */
+            touch-action: manipulation;
             border: 0.5px solid var(--border-light);
             display: flex;
             align-items: center;
@@ -81,74 +92,92 @@
             font-size: 1.2rem;
             font-weight: 500;
             cursor: pointer;
+            position: relative;
         }
 
-        /* 3x3 굵은 선 테두리 스타일링 */
         .cell:nth-child(3n) { border-right: 2px solid var(--border-heavy); }
         .cell:nth-child(9n) { border-right: none; }
         .cell:nth-child(n+19):nth-child(-n+27),
         .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--border-heavy); }
 
-        /* 셀 상태 클래스 */
         .cell.fixed { background-color: #f1f5f9; color: #475569; font-weight: 700; cursor: default; }
         .cell.selected { background-color: var(--selected) !important; }
-        .cell.error { color: var(--error); }
+        .cell.error { color: var(--error); font-weight: bold; }
         .cell.highlight { background-color: var(--highlight); }
+        .cell.highlight-sync { background-color: var(--highlight-sync); }
 
-        .keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 20px; width: 100%; }
-        .key { 
-            padding: 12px; 
-            background: white; 
-            border: 1px solid var(--border-light); 
-            border-radius: 8px; 
-            text-align: center; 
-            font-weight: bold; 
-            cursor: pointer; 
-            font-size: 1.1rem; 
-            touch-action: manipulation; /* 모바일 더블 탭 확대 방지 */
+        /* 메모 모드 분할 그리드 */
+        .memo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            height: 100%;
+            font-size: 0.55rem;
+            color: #64748b;
+            text-align: center;
+            align-items: center;
         }
+
+        /* 오류 발생 시 흔들림 애니메이션 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+        .shake { animation: shake 0.3s; }
+
+        .keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; width: 100%; }
+        .key { padding: 12px; background: white; border: 1px solid var(--border-light); border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; font-size: 1.1rem; touch-action: manipulation; }
         .key.clear { grid-column: span 1; color: var(--error); }
         
         .status { text-align: center; margin-top: 15px; font-weight: 600; height: 24px; }
-        .nav-bar { width: 100%; display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .nav-btn { background: none; border: none; color: var(--accent); font-weight: bold; cursor: pointer; padding: 5px; }
+        .nav-bar { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .nav-btn { background: white; border: 1px solid var(--border-light); border-radius: 6px; color: var(--text-main); font-weight: 600; cursor: pointer; padding: 6px 12px; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <h2 id="main-title">Web Sudoku</h2>
+        <h2 id="main-title">즐거운 sdoku</h2>
     </div>
 
-    <!-- Screen 1: 난이도 선택 -->
     <div id="screen-diff" class="screen active">
-        <h3>난이도를 선택하세요</h3>
-        <button class="btn" onclick="selectDifficulty('easy', '하')">하 (Easy)</button>
-        <button class="btn" onclick="selectDifficulty('medium', '중')">중 (Medium)</button>
-        <button class="btn" onclick="selectDifficulty('hard', '상')">상 (Hard)</button>
+        <div style="height: 20px;"></div>
+        <button class="btn" onclick="selectDifficulty('hard', '상')">상</button>
+        <button class="btn" onclick="selectDifficulty('medium', '중')">중</button>
+        <button class="btn" onclick="selectDifficulty('easy', '하')">하</button>
     </div>
 
-    <!-- Screen 2: 스테이지(번호) 선택 -->
     <div id="screen-level" class="screen">
         <div class="nav-bar">
-            <button class="nav-btn" onclick="showScreen('screen-diff')">← 뒤로</button>
-            <span id="level-title" style="font-weight: bold;"></span>
-            <span style="width: 40px;"></span>
+            <button class="nav-btn" onclick="showScreen('screen-diff')">🏠 홈</button>
+            <span id="level-title" style="font-weight: bold; font-size: 1.1rem;"></span>
+            <div style="width: 60px;"></div>
         </div>
         <div class="level-grid" id="level-buttons"></div>
     </div>
 
-    <!-- Screen 3: 게임 화면 -->
     <div id="screen-game" class="screen">
         <div class="nav-bar">
-            <button class="nav-btn" onclick="showScreen('screen-level')">← 목록으로</button>
-            <span id="game-title" style="font-weight: bold;"></span>
-            <span style="width: 40px;"></span>
+            <button class="nav-btn" onclick="showScreen('screen-level')">← 뒤로</button>
+            <div style="text-align: center;">
+                <div id="game-title" style="font-weight: bold; font-size: 1rem;"></div>
+                <div id="timer" style="font-size: 0.8rem; color: #64748b;">00:00</div>
+            </div>
+            <button class="nav-btn" onclick="restartGame()">🔄 다시시작</button>
         </div>
         
+        <div class="progress-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+
         <div class="sudoku-grid" id="grid"></div>
-        <div class="status" id="status"></div>
+        
+        <div style="display: flex; gap: 10px; width: 100%; margin-top: 15px;">
+            <button id="memo-toggle-btn" class="btn" style="flex: 1; max-width: none; margin:0;" onclick="toggleMemoMode()">✏️ 메모 모드: OFF</button>
+        </div>
 
         <div class="keypad">
             <div class="key" onclick="handleInput(1)">1</div>
@@ -162,12 +191,12 @@
             <div class="key" onclick="handleInput(9)">9</div>
             <div class="key clear" onclick="handleInput(0)">지우기</div>
         </div>
+        
+        <div class="status" id="status"></div>
     </div>
 </div>
 
 <script>
-    // 난이도별 10개의 데이터 배열 (0은 빈칸). 
-    // 확장을 위해 예제 데이터가 포함되어 있습니다. 필요시 추가하십시오.
     const puzzles = {
         easy: [
             "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
@@ -186,17 +215,36 @@
     };
 
     let currentDifficulty = '';
+    let currentDifficultyLabel = '';
+    let currentLevelIndex = 0;
     let selectedCell = null;
+    let isMemoMode = false;
+    let memos = Array(81).fill().map(() => []); // 메모 데이터 배열
+    
+    // 타이머 변수
+    let timerInterval = null;
+    let timeElapsed = 0;
 
-    // 화면 전환 로직
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
     function showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
+        if (screenId === 'screen-diff') {
+            document.getElementById('level-buttons').innerHTML = '';
+        }
+        if (screenId !== 'screen-game' && timerInterval) {
+            clearInterval(timerInterval);
+        }
     }
 
-    // 난이도 및 스테이지 버튼 생성
     function selectDifficulty(diff, label) {
         currentDifficulty = diff;
+        currentDifficultyLabel = label;
         document.getElementById('level-title').textContent = `난이도: ${label}`;
         
         const container = document.getElementById('level-buttons');
@@ -205,98 +253,200 @@
         for (let i = 0; i < 10; i++) {
             const btn = document.createElement('button');
             btn.className = 'btn';
-            btn.textContent = `${i + 1}번 게임`;
+            
+            const isCleared = localStorage.getItem(`sudoku_${diff}_${i}`) === 'true';
+            const bestTime = localStorage.getItem(`sudoku_${diff}_${i}_time`);
+            
+            let innerHtml = `<div>${i + 1}번 게임 ${isCleared ? '<span class="stamp">✔</span>' : ''}</div>`;
+            if (isCleared && bestTime) {
+                innerHtml += `<div class="record-text">최단 기록: ${formatTime(parseInt(bestTime))}</div>`;
+            }
+            
+            btn.innerHTML = innerHtml;
             btn.onclick = () => startGame(diff, label, i);
             container.appendChild(btn);
         }
         showScreen('screen-level');
     }
 
-    // 게임 시작 초기화
     function startGame(diff, label, index) {
+        currentLevelIndex = index;
         document.getElementById('game-title').textContent = `${label} - ${index + 1}번`;
+        isMemoMode = false;
+        updateMemoBtnUI();
         initGrid();
         loadPuzzle(diff, index);
+        
+        // 타이머 초기화 및 시작
+        timeElapsed = 0;
+        document.getElementById('timer').textContent = "00:00";
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeElapsed++;
+            document.getElementById('timer').textContent = formatTime(timeElapsed);
+        }, 1000);
+
         showScreen('screen-game');
     }
 
-    // 81개 그리드 셀 생성
+    function restartGame() {
+        if(confirm("현재 진행 상황이 초기화됩니다. 다시 시작하시겠습니까?")) {
+            startGame(currentDifficulty, currentDifficultyLabel, currentLevelIndex);
+        }
+    }
+
+    function toggleMemoMode() {
+        isMemoMode = !isMemoMode;
+        updateMemoBtnUI();
+    }
+
+    function updateMemoBtnUI() {
+        const btn = document.getElementById('memo-toggle-btn');
+        if (isMemoMode) {
+            btn.classList.add('active-toggle');
+            btn.textContent = "✏️ 메모 모드: ON";
+        } else {
+            btn.classList.remove('active-toggle');
+            btn.textContent = "✏️ 메모 모드: OFF";
+        }
+    }
+
     function initGrid() {
         const grid = document.getElementById('grid');
         grid.innerHTML = '';
+        memos = Array(81).fill().map(() => []);
+        
         for (let i = 0; i < 81; i++) {
             const cell = document.createElement('div');
             cell.className = 'cell';
             cell.dataset.index = i;
+            cell.dataset.val = ''; // DOM과 값 분리 저장
             cell.onclick = () => selectCell(cell);
             grid.appendChild(cell);
         }
     }
 
-    // 데이터 바인딩
     function loadPuzzle(diff, index) {
         const puzzleStr = puzzles[diff][index] || Array(81).fill('0').join('');
         const cells = document.querySelectorAll('.cell');
         
         cells.forEach((cell, i) => {
-            cell.classList.remove('fixed', 'selected', 'error', 'highlight');
+            cell.classList.remove('fixed', 'selected', 'error', 'highlight', 'highlight-sync');
             const val = puzzleStr[i];
             if (val !== '0') {
-                cell.textContent = val;
+                cell.dataset.val = val;
+                cell.innerHTML = val;
                 cell.classList.add('fixed');
             } else {
-                cell.textContent = '';
+                cell.dataset.val = '';
+                cell.innerHTML = '';
             }
         });
         document.getElementById('status').textContent = '';
         selectedCell = null;
+        updateProgressBar();
     }
 
-    // 셀 선택 및 하이라이트 처리
+    function renderCell(cell) {
+        const idx = cell.dataset.index;
+        const val = cell.dataset.val;
+        
+        if (val) {
+            cell.innerHTML = val;
+        } else {
+            const cellMemos = memos[idx];
+            if (cellMemos.length > 0) {
+                let html = '<div class="memo-grid">';
+                for(let i=1; i<=9; i++) {
+                    html += `<div>${cellMemos.includes(i) ? i : ''}</div>`;
+                }
+                html += '</div>';
+                cell.innerHTML = html;
+            } else {
+                cell.innerHTML = '';
+            }
+        }
+    }
+
     function selectCell(cell) {
         if (cell.classList.contains('fixed')) return;
         
-        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected', 'highlight'));
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected', 'highlight', 'highlight-sync'));
         cell.classList.add('selected');
         selectedCell = cell;
 
         const idx = parseInt(cell.dataset.index);
         const row = Math.floor(idx / 9);
         const col = idx % 9;
+        const selVal = cell.dataset.val;
         
         document.querySelectorAll('.cell').forEach(c => {
             const i = parseInt(c.dataset.index);
+            // 같은 행/열 하이라이트
             if (Math.floor(i / 9) === row || i % 9 === col) {
                 c.classList.add('highlight');
+            }
+            // 동기화 하이라이트 (동일 숫자)
+            if (selVal && c.dataset.val === selVal) {
+                c.classList.add('highlight-sync');
             }
         });
     }
 
-    // 키패드 입력 처리
     function handleInput(num) {
         if (!selectedCell) return;
-        
-        if (num === 0) {
-            selectedCell.textContent = '';
-        } else {
-            selectedCell.textContent = num;
+
+        // 진동 피드백 (모바일 지원 기기 한정)
+        if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(50);
         }
         
-        // 입력 직후 전체 그리드 재검증
-        validateAllCells();
-        checkComplete();
+        const idx = parseInt(selectedCell.dataset.index);
+
+        if (num === 0) {
+            selectedCell.dataset.val = '';
+            memos[idx] = [];
+        } else {
+            if (isMemoMode) {
+                if (!selectedCell.dataset.val) {
+                    const memoIdx = memos[idx].indexOf(num);
+                    if (memoIdx > -1) memos[idx].splice(memoIdx, 1);
+                    else memos[idx].push(num);
+                }
+            } else {
+                selectedCell.dataset.val = num;
+                memos[idx] = []; // 정답 확정 시 메모 초기화
+            }
+        }
+        
+        renderCell(selectedCell);
+        
+        if (!isMemoMode || num === 0) {
+            validateAllCells();
+            updateProgressBar();
+            checkComplete();
+            
+            // 입력 후 동기화 하이라이트 재적용
+            if(selectedCell) selectCell(selectedCell);
+        }
     }
 
-    // 3x3 박스 포함 전체 교차 검증 로직 (상태 불일치 버그 해결)
+    function updateProgressBar() {
+        const cells = document.querySelectorAll('.cell');
+        let filled = 0;
+        cells.forEach(c => { if (c.dataset.val) filled++; });
+        const percentage = (filled / 81) * 100;
+        document.getElementById('progress-bar').style.width = `${percentage}%`;
+    }
+
     function validateAllCells() {
         const cells = document.querySelectorAll('.cell');
-        
-        // 1. 에러 마킹 전체 초기화
+        let currentInputError = false;
+
         cells.forEach(c => c.classList.remove('error'));
 
-        // 2. 값이 채워진 모든 셀을 대상으로 검증 수행
         cells.forEach(cell => {
-            const val = cell.textContent;
+            const val = cell.dataset.val;
             if (!val) return; 
 
             const idx = parseInt(cell.dataset.index);
@@ -309,9 +459,9 @@
 
             cells.forEach(c => {
                 const i = parseInt(c.dataset.index);
-                if (i === idx) return; // 본인 제외
+                if (i === idx) return; 
                 
-                const cVal = c.textContent;
+                const cVal = c.dataset.val;
                 if (!cVal) return;
 
                 const cRow = Math.floor(i / 9);
@@ -319,7 +469,6 @@
                 const cBlockRow = Math.floor(cRow / 3);
                 const cBlockCol = Math.floor(cCol / 3);
 
-                // 가로, 세로, 3x3 블록 내 동일한 숫자가 있는지 확인
                 if ((cRow === row || cCol === col || (blockRow === cBlockRow && blockCol === cBlockCol)) && cVal === val) {
                     hasError = true;
                 }
@@ -327,19 +476,39 @@
 
             if (hasError) {
                 cell.classList.add('error');
+                if (cell === selectedCell) currentInputError = true;
             }
         });
+
+        // 현재 입력한 셀에서 에러가 발생한 경우 흔들림 애니메이션 부여
+        if (currentInputError && selectedCell) {
+            selectedCell.classList.add('shake');
+            setTimeout(() => {
+                selectedCell.classList.remove('shake');
+            }, 300);
+        }
     }
 
-    // 게임 완료 조건 확인
     function checkComplete() {
         const cells = Array.from(document.querySelectorAll('.cell'));
-        const empty = cells.some(c => c.textContent === '');
+        const empty = cells.some(c => !c.dataset.val);
         const errors = cells.some(c => c.classList.contains('error'));
 
         if (!empty && !errors) {
+            clearInterval(timerInterval);
+            
             document.getElementById('status').textContent = "축하합니다! 완성하셨습니다.";
             document.getElementById('status').style.color = "var(--accent)";
+            
+            // Confetti 폭죽 이펙트
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            
+            // 기록 저장 로직
+            localStorage.setItem(`sudoku_${currentDifficulty}_${currentLevelIndex}`, 'true');
+            const prevBest = localStorage.getItem(`sudoku_${currentDifficulty}_${currentLevelIndex}_time`);
+            if (!prevBest || timeElapsed < parseInt(prevBest)) {
+                localStorage.setItem(`sudoku_${currentDifficulty}_${currentLevelIndex}_time`, timeElapsed);
+            }
         } else {
             document.getElementById('status').textContent = "";
         }
