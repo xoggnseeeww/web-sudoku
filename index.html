@@ -3,214 +3,556 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>즐거운 스도쿠 - Vibe Edition</title>
+    <title>즐거운 스도쿠</title>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         :root {
             --bg: #f8f7f4; --card: #ffffff; --border-heavy: #1e1b18; --border-light: #d4cfc8;
-            --text: #1e1b18; --accent: #c44b20; --fixed-bg: #eeeae4; --selected: #fde8e0;
-            --highlight: #f1f5f9; --sync: #fce8c2; --error: #c41f1f; --memo: #9b7dc0; --radius: 12px;
+            --text: #1e1b18; --accent: #c44b20; --fixed-bg: #eeeae4; --selected: #fbd5c5;
+            --highlight: #fef3ee; --same-num: #fde8e0;
+            --error: #c41f1f; --memo: #9b7dc0; --hint-color: #2563eb; --radius: 12px;
         }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; padding: 16px 12px; font-family: 'Georgia', serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; }
         .container { max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
-        .header h1 { text-align: center; font-size: 1.6rem; margin: 0; color: var(--accent); }
+        .header { text-align: center; }
+        .header h1 { font-size: 1.6rem; margin: 0; color: var(--accent); }
         .screen { display: none; flex-direction: column; width: 100%; animation: fadeIn 0.2s ease; }
         .screen.active { display: flex; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .btn { width: 100%; min-height: 54px; border: 1.5px solid var(--border-light); background: var(--card); border-radius: var(--radius); font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+        .btn { width: 100%; min-height: 54px; border: 1.5px solid var(--border-light); background: var(--card); border-radius: var(--radius); font-weight: 600; cursor: pointer; margin-bottom: 8px; font-size: 1rem; }
         .btn.primary { background: var(--accent); color: white; border: none; }
         .level-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .sudoku-grid { display: grid; grid-template-columns: repeat(9, 1fr); border: 2.5px solid var(--border-heavy); background: var(--border-light); gap: 1px; width: 100%; aspect-ratio: 1/1; }
-        .cell { background: white; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; font-weight: 600; cursor: pointer; position: relative; }
-        .cell:nth-child(3n):not(:nth-child(9n)) { border-right: 2px solid var(--border-heavy); }
-        .cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2.5px solid var(--border-heavy); }
-        .cell.fixed { background: var(--fixed-bg); color: #4a4540; font-weight: 800; cursor: default; }
+        .sudoku-grid {
+            display: grid; grid-template-columns: repeat(9, 1fr);
+            border: 2.5px solid var(--border-heavy);
+            background: var(--border-light); gap: 1px;
+            width: 100%; aspect-ratio: 1/1;
+        }
+        .cell {
+            background: white; display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; font-weight: 600; cursor: pointer; position: relative;
+            transition: background 0.1s;
+        }
+        /* 3×3 박스 구분선 */
+        .cell:nth-child(3n):not(:nth-child(9n))  { border-right: 2px solid var(--border-heavy); }
+        .cell:nth-child(n+19):nth-child(-n+27)   { border-bottom: 2px solid var(--border-heavy); }
+        .cell:nth-child(n+46):nth-child(-n+54)   { border-bottom: 2px solid var(--border-heavy); }
+
+        .cell.fixed    { background: var(--fixed-bg); color: #4a4540; font-weight: 800; cursor: default; }
+        .cell.highlight{ background: var(--highlight); }
+        .cell.same-num { background: var(--same-num); }
         .cell.selected { background: var(--selected) !important; outline: 2.5px solid var(--accent); z-index: 2; }
-        .cell.highlight { background: var(--highlight); }
-        .cell.highlight-sync { background: var(--sync); }
-        .cell.error { color: var(--error); }
-        .memo-grid { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; height: 100%; font-size: 0.6rem; color: var(--memo); pointer-events: none; }
+        .cell.error    { color: var(--error) !important; }
+        .cell.hint-cell{ color: var(--hint-color); }
+
+        .memo-grid { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; height: 100%; font-size: 0.55rem; color: var(--memo); line-height: 1; }
+        .memo-grid div { display: flex; align-items: center; justify-content: center; }
+
         .keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 10px; }
-        .key { height: 54px; background: white; border: 1.5px solid var(--border-light); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; cursor: pointer; position: relative; }
+        .key { height: 54px; background: white; border: 1.5px solid var(--border-light); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; cursor: pointer; position: relative; font-size: 1.1rem; }
         .key .remain { font-size: 0.5rem; opacity: 0.5; position: absolute; bottom: 4px; }
         .key.key-done { opacity: 0.2; pointer-events: none; }
         .key.del { color: var(--error); }
         .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .timer { font-family: monospace; color: #666; font-size: 0.9rem; }
+        .nav-bar button { border: 1px solid var(--border-light); background: var(--card); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; }
+        .tool-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .tool-bar button { min-height: 44px; border: 1.5px solid var(--border-light); background: var(--card); border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+        .tool-bar button.active { background: var(--accent); color: white; border-color: var(--accent); }
+        #status { text-align: center; margin-top: 10px; font-weight: bold; color: var(--accent); min-height: 1.5em; }
+        .difficulty-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.75rem; background: var(--fixed-bg); }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header"><h1>즐거운 스도쿠</h1></div>
+
+    <!-- 난이도 선택 -->
     <div id="screen-diff" class="screen active">
-        <button class="btn primary" onclick="selectDifficulty('easy', '하')">하 (Easy)</button>
-        <button class="btn" onclick="selectDifficulty('medium', '중')">중 (Medium)</button>
-        <button class="btn" onclick="selectDifficulty('hard', '상')">상 (Hard)</button>
+        <button class="btn primary" onclick="selectDifficulty('easy','하')">하 (Easy)</button>
+        <button class="btn"         onclick="selectDifficulty('medium','중')">중 (Medium)</button>
+        <button class="btn"         onclick="selectDifficulty('hard','상')">상 (Hard)</button>
     </div>
+
+    <!-- 스테이지 선택 -->
     <div id="screen-level" class="screen">
-        <div class="nav-bar"><button onclick="showScreen('screen-diff')">🏠 홈</button><span id="level-title"></span><div style="width:40px"></div></div>
+        <div class="nav-bar">
+            <button onclick="showScreen('screen-diff')">🏠 홈</button>
+            <span id="level-title" style="font-weight:bold"></span>
+            <div style="width:60px"></div>
+        </div>
         <div class="level-grid" id="level-buttons"></div>
     </div>
+
+    <!-- 게임 화면 -->
     <div id="screen-game" class="screen">
-        <div class="nav-bar"><button onclick="showScreen('screen-level')">← 목록</button>
-            <div style="text-align:center"><div id="game-title" style="font-weight:bold; font-size:0.9rem"></div><div id="timer" class="timer">00:00</div></div>
+        <div class="nav-bar">
+            <button onclick="showScreen('screen-level')">← 목록</button>
+            <div style="text-align:center">
+                <div id="game-title" style="font-weight:bold; font-size:0.9rem"></div>
+                <div id="timer" style="font-size:0.85rem; color:#666">00:00</div>
+            </div>
             <button onclick="restartGame()">🔄 다시</button>
         </div>
         <div class="sudoku-grid" id="grid"></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px">
-            <button class="btn" style="min-height:44px; margin:0" onclick="undoMove()">↩ 되돌리기</button>
-            <button class="btn" style="min-height:44px; margin:0" id="memo-btn" onclick="toggleMemoMode()">✏️ 메모 OFF</button>
-            <button class="btn" style="min-height:44px; margin:0; color:#d97706" id="hint-btn" onclick="useHint()">💡 힌트 (3)</button>
+        <div class="tool-bar">
+            <button onclick="undoMove()">↩ 되돌리기</button>
+            <button id="memo-btn" onclick="toggleMemoMode()">✏️ 메모 OFF</button>
+            <button id="hint-btn" onclick="useHint()" style="color:#d97706">💡 힌트</button>
         </div>
         <div class="keypad" id="keypad"></div>
-        <div id="status" style="text-align:center; margin-top:10px; font-weight:bold; color:var(--accent); min-height:24px;"></div>
+        <div id="status"></div>
     </div>
 </div>
 
 <script>
-    const PUZZLES = {
-        easy: ["083007060915002748207100000190400630652800070074021500501046097840709320729000006", "943168257751234869286975413519782346367491528824356971635827194492613785178549632", "743285916528196734169734825836459271915327468274618593657941382492863157381572649", "391846527645172839782395461429613785817529643563784912134958276978261354256437198", "467813952392645718158729364935481627681972435274356189716298543529134876843567291", "795241863128396475346857129954618237271435986683972541812563794437189652569724318", "546813792981627345723495168817249536652378419394156287465932871178564923239781654", "593842716178596243246713958834657129759321684621984375982165437467238591315479862", "278315946516489237439762158784623519653198472921574863142937685867251394395846721", "135492678672835149498716253724563981569281437813974562247158396956327814381649725"],
-        medium: ["000490200090100704240003100810000500000008900900005003620900300479030015003061000", "794281365516973482823645971231467598948152637675839124387594216462318759159726843", "641598273827463519935712684216854937783129465459637128368245791592371846174986352", "394871256876952143215463789539784621127635894648219537483127965961548372752396418", "735486192964312578218597346182935764543678921697124835376841259859263417421759683", "859246173347851629126973548412395786793618452568724931631487295284569317975132864", "749825631236417895158936274514673982382159746967284513623748159471592368895361427", "936285714584317926172649835398152647615974382427863159859436271761528493243791568", "745236189612498537983157624257649813361872495498513762124385976539761248876924351", "275961834463578912891243657586397241729814563134652798358429176947186325612735489"],
-        hard: ["006075080000000000004000200000018090070026105100030020200000600000001700008002039", "714935286895426137326178954648351729231749568579862341183294675952687413467513892", "942637815136985742578142639825496371364751928719823456681574293297318564453269187", "967523841382461975154978623231749568579386412648152739426835197893617254715294386", "652917348178324659394856721815239476243768915967145283439582167521673894786491532", "267389415491567823835142976752918634384256791619734582543871269976423158128695347", "823167594615294837947358216162485973598673142374921658459836721736512489281749365", "729138465156492837483657912248973651397561248561284793835746129914825376672319584", "439218675126574983785693241241836597358927416697451832863145729914762358572389164", "857162934193748562642359187731894256269573418485621793314285679526937841978416325"]
-    };
-    const SOLUTIONS = {
-        easy: ["483957261915362748267184953198475632652893174374621589531246897846719325729538416", "943168257751234869286975413519782346367491528824356971635827194492613785178549632", "743285916528196734169734825836459271915327468274618593657941382492863157381572649", "391846527645172839782395461429613785817529643563784912134958276978261354256437198", "467813952392645718158729364935481627681972435274356189716298543529134876843567291", "795241863128396475346857129954618237271435986683972541812563794437189652569724318", "546813792981627345723495168817249536652378419394156287465932871178564923239781654", "593842716178596243246713958834657129759321684621984375982165437467238591315479862", "278315946516489237439762158784623519653198472921574863142937685867251394395846721", "135492678672835149498716253724563981569281437813974562247158396956327814381649725"],
-        medium: ["156497238398126754247583169812379546735648921964215873621954387479832615583761492", "794281365516973482823645971231467598948152637675839124387594216462318759159726843", "641598273827463519935712684216854937783129465459637128368245791592371846174986352", "394871256876952143215463789539784621127635894648219537483127965961548372752396418", "735486192964312578218597346182935764543678921697124835376841259859263417421759683", "859246173347851629126973548412395786793618452568724931631487295284569317975132864", "749825631236417895158936274514673982382159746967284513623748159471592368895361427", "936285714584317926172649835398152647615974382427863159859436271761528493243791568", "745236189612498537983157624257649813361872495498513762124385976539761248876924351", "275961834463578912891243657586397241729814563134652798358429176947186325612735489"],
-        hard: ["326175984781294563954683271462518397873926145195437826247359618639841752518762439", "714935286895426137326178954648351729231749568579862341183294675952687413467513892", "942637815136985742578142639825496371364751928719823456681574293297318564453269187", "967523841382461975154978623231749568579386412648152739426835197893617254715294386", "652917348178324659394856721815239476243768915967145283439582167521673894786491532", "267389415491567823835142976752918634384256791619734582543871269976423158128695347", "823167594615294837947358216162485973598673142374921658459836721736512489281749365", "729138465156492837483657912248973651397561248561284793835746129914825376672319584", "439218675126574983785693241241836597358927416697451832863145729914762358572389164", "857162934193748562642359187731894256269573418485621793314285679526937841978416325"]
-    };
+// ─────────────────────────────────────────────
+//  퍼즐 데이터 (81자리 문자열, 0=빈칸)
+// ─────────────────────────────────────────────
+// 퍼즐 데이터: 30개 (각 난이도 10개), 백트래킹으로 유일해 검증 완료
+const PUZZLES = {
+    easy: [
+        "083007060915002748207100000190400630652803074004600589001006807846700320729000000", // givens=44
+        "940168050750230869280000003519700306307490500824050001000820190092013700078500030", // givens=45
+        "700285916008106030100034020806050200015027460200018503000940002092800157301002049", // givens=44
+        "608009052000120060020065079301507290005901780009632001072356004090200030006790805", // givens=43
+        "100702043042309070397400008054020000000578260820940000070600032409030051213004706", // givens=42
+        "290014005501030006348600207700100600169800024052060901907500143005372069083000570", // givens=45
+        "105742080004090700760050002000980007879604020043000098007308069081400050932501074", // givens=42
+        "200007601071260590490003702352041008719006000648925317064000039007400150100009204", // givens=46
+        "580000763673582041040037050950420030001000489400910520016054002034200000290806314", // givens=46
+        "063080020070430010900726084580002731134678000000013040310807002007001068008200173"  // givens=43
+    ],
+    medium: [
+        "002008501000056003050004000010040658095010004834000029008070206070020380500000090", // givens=33
+        "000243018000860000031070002080009001000020000106000005418030729003000106067402003", // givens=33
+        "070016050104000038962083004000090500090000800207000109830002490001960080700000000", // givens=32
+        "384090060000060800100400000018500090700026000002780010070004000000802900050907201", // givens=30
+        "010080000027100048000000000438521600150407082000830010070390200690008005003005007", // givens=34
+        "007003800010506204020108063604000908005860700001700005006907000002000007080001090", // givens=32
+        "901000504060090130500001670005000003473000000002380900000600000040150000756030490", // givens=31
+        "900308050754012000300000219065000001007020000090801007030000480408000000001500070", // givens=30
+        "079400056300500980050200400000040000094060000200190030000003742000018069006020500", // givens=31
+        "100980350005603070002145900090010700200000004054002000028064100309000540000091000"  // givens=33
+    ],
+    hard: [
+        "400001003070000060009000870600000930003200786000005000030900600900080002008023000", // givens=26
+        "900000030000006000000510000007100608000080007000032401406070900192004000805000000", // givens=25
+        "097000500500608012000700600003020000000003970089000200000510000400000197008900060", // givens=27
+        "570004000023000700600057030400009060837001400000700000002000809000630000040090000", // givens=26
+        "000080095000200030500006708002009000170000500040030000000400052756090100000300806", // givens=27
+        "000807250201000063030002004005000087000083000009400000000000400600000000470008036", // givens=25
+        "084000600210009000000000007000083000800000576792000000000070060900028401000050089", // givens=26
+        "100700060050029010000004000400860090000405000065000300020040001007006045800001009", // givens=27
+        "000410030000000400010009085080000040000240076079000208003007800508063000006000000", // givens=26
+        "542000000900000254006000900400160002001000000020000090060810000003009060009002500"  // givens=25
+    ]
+};
 
-    let curDiff = '', curIdx = 0, selCell = null, isMemo = false, history = [], memos = [], timer = null, time = 0, hints = 3, solution = "";
+// ─────────────────────────────────────────────
+//  상태
+// ─────────────────────────────────────────────
+let curDiff = '', curIdx = 0;
+let selCell  = null;
+let isMemo   = false;
+let history  = [];       // [{idx, val, memo}]
+let memos    = [];       // Array(81) of number[]
+let timer    = null;
+let time     = 0;
+let hintCount = 0;
 
-    function showScreen(id) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        if (id !== 'screen-game' && timer) { clearInterval(timer); timer = null; }
-        sendHeight();
-    }
+// ─────────────────────────────────────────────
+//  화면 전환
+// ─────────────────────────────────────────────
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id !== 'screen-game') { clearInterval(timer); timer = null; }
+    sendHeight();
+}
 
-    function selectDifficulty(diff, label) {
-        curDiff = diff; document.getElementById('level-title').textContent = label;
-        const container = document.getElementById('level-buttons'); container.innerHTML = '';
-        PUZZLES[diff].forEach((_, i) => {
-            const btn = document.createElement('button'); btn.className = 'btn';
-            const cleared = localStorage.getItem(`sdk_${diff}_${i}`) === 'true';
-            btn.innerHTML = `Stage ${i+1} ${cleared?'<span style="color:green">✔</span>':''}`;
-            btn.onclick = () => startGame(diff, label, i);
-            container.appendChild(btn);
-        });
-        showScreen('screen-level');
-    }
+function selectDifficulty(diff, label) {
+    curDiff = diff;
+    document.getElementById('level-title').textContent = label;
+    const container = document.getElementById('level-buttons');
+    container.innerHTML = '';
+    PUZZLES[diff].forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = `Stage ${i + 1}`;
+        btn.onclick = () => startGame(diff, label, i);
+        container.appendChild(btn);
+    });
+    showScreen('screen-level');
+}
 
-    function startGame(diff, label, idx) {
-        curIdx = idx; document.getElementById('game-title').textContent = `${label} - ${idx+1}`;
-        time = 0; hints = 3; history = []; memos = Array(81).fill().map(() => []);
-        solution = SOLUTIONS[diff][idx];
-        document.getElementById('hint-btn').textContent = `💡 힌트 (${hints})`;
-        document.getElementById('status').textContent = '';
-        initGrid(diff, idx);
-        if (timer) clearInterval(timer);
-        timer = setInterval(() => { time++; document.getElementById('timer').textContent = Math.floor(time/60).toString().padStart(2,'0') + ':' + (time%60).toString().padStart(2,'0'); }, 1000);
-        showScreen('screen-game');
-    }
+// ─────────────────────────────────────────────
+//  게임 초기화
+// ─────────────────────────────────────────────
+function startGame(diff, label, idx) {
+    curDiff = diff; curIdx = idx;
+    document.getElementById('game-title').textContent = `${label} - Stage ${idx + 1}`;
+    resetGameState();
+    initGrid();
+    startTimer();
+    showScreen('screen-game');
+}
 
-    function restartGame() { if (confirm("현재 게임을 초기화할까요?")) startGame(curDiff, document.getElementById('level-title').textContent, curIdx); }
+function resetGameState() {
+    clearInterval(timer); timer = null;
+    time = 0; history = []; hintCount = 0; isMemo = false;
+    memos = Array(81).fill(null).map(() => []);
+    selCell = null;
+    document.getElementById('memo-btn').textContent = '✏️ 메모 OFF';
+    document.getElementById('memo-btn').classList.remove('active');
+    document.getElementById('status').textContent = '';
+    updateTimer();
+}
 
-    function initGrid(diff, idx) {
-        const grid = document.getElementById('grid'); grid.innerHTML = '';
-        const puzzle = PUZZLES[diff][idx];
-        for (let i = 0; i < 81; i++) {
-            const cell = document.createElement('div'); cell.className = 'cell'; cell.dataset.index = i;
-            if (puzzle[i] !== '0') { cell.textContent = puzzle[i]; cell.dataset.val = puzzle[i]; cell.classList.add('fixed'); }
-            cell.onclick = () => selectCell(cell); grid.appendChild(cell);
+function restartGame() {
+    resetGameState();
+    initGrid();
+    startTimer();
+}
+
+function startTimer() {
+    timer = setInterval(() => { time++; updateTimer(); }, 1000);
+}
+
+function updateTimer() {
+    const m = Math.floor(time / 60).toString().padStart(2, '0');
+    const s = (time % 60).toString().padStart(2, '0');
+    document.getElementById('timer').textContent = `${m}:${s}`;
+}
+
+// ─────────────────────────────────────────────
+//  그리드 렌더링
+// ─────────────────────────────────────────────
+function initGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    const puzzle = PUZZLES[curDiff][curIdx];
+    for (let i = 0; i < 81; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.index = i;
+        if (puzzle[i] !== '0') {
+            cell.textContent = puzzle[i];
+            cell.dataset.val  = puzzle[i];
+            cell.classList.add('fixed');
+        } else {
+            cell.dataset.val = '';
         }
-        renderKeypad();
+        cell.addEventListener('click', () => selectCell(cell));
+        grid.appendChild(cell);
+    }
+    renderKeypad();
+}
+
+// ─────────────────────────────────────────────
+//  셀 선택 + 하이라이트
+// ─────────────────────────────────────────────
+function selectCell(cell) {
+    if (!cell) return;
+    const cells = getCells();
+    const idx  = parseInt(cell.dataset.index);
+    const row  = Math.floor(idx / 9), col = idx % 9;
+    const bRow = Math.floor(row / 3) * 3, bCol = Math.floor(col / 3) * 3;
+    const val  = cell.dataset.val;
+
+    cells.forEach((c, i) => {
+        c.classList.remove('selected', 'highlight', 'same-num');
+        const r = Math.floor(i / 9), co = i % 9;
+        const inBox = r >= bRow && r < bRow + 3 && co >= bCol && co < bCol + 3;
+        if (r === row || co === col || inBox) c.classList.add('highlight');
+        if (val && c.dataset.val === val && i !== idx) c.classList.add('same-num');
+    });
+    cell.classList.remove('highlight');
+    cell.classList.add('selected');
+    selCell = cell;
+}
+
+// ─────────────────────────────────────────────
+//  입력 처리
+// ─────────────────────────────────────────────
+function handleInput(num) {
+    if (!selCell || selCell.classList.contains('fixed')) return;
+    const idx = parseInt(selCell.dataset.index);
+
+    // 히스토리 저장 (undo용)
+    history.push({ idx, val: selCell.dataset.val || '', memo: [...memos[idx]] });
+
+    if (num === 0) {
+        // DEL
+        selCell.dataset.val = '';
+        selCell.textContent = '';
+        selCell.classList.remove('hint-cell');
+        memos[idx] = [];
+    } else if (isMemo) {
+        // 메모 토글
+        const mIdx = memos[idx].indexOf(num);
+        if (mIdx > -1) memos[idx].splice(mIdx, 1);
+        else           memos[idx].push(num);
+        renderMemo(selCell, idx);
+        // 메모 입력은 dataset.val 건드리지 않음
+    } else {
+        selCell.dataset.val = num.toString();
+        selCell.textContent = num;
+        selCell.classList.remove('hint-cell');
+        memos[idx] = [];
     }
 
-    function selectCell(cell) {
-        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected','highlight','highlight-sync'));
-        cell.classList.add('selected'); selCell = cell;
-        const idx = parseInt(cell.dataset.index), row = Math.floor(idx/9), col = idx%9, boxR = Math.floor(row/3), boxC = Math.floor(col/3);
-        document.querySelectorAll('.cell').forEach(c => {
-            const i = parseInt(c.dataset.index), r = Math.floor(i/9), co = i%9;
-            if (r === row || co === col || (Math.floor(r/3) === boxR && Math.floor(co/3) === boxC)) c.classList.add('highlight');
-            if (cell.dataset.val && c.dataset.val === cell.dataset.val) c.classList.add('highlight-sync');
-        });
+    markErrors();
+    renderKeypad();
+    checkWin();
+    selectCell(selCell); // 하이라이트 갱신
+}
+
+// ─────────────────────────────────────────────
+//  메모 렌더링
+// ─────────────────────────────────────────────
+function renderMemo(cell, idx) {
+    let html = '<div class="memo-grid">';
+    for (let n = 1; n <= 9; n++) {
+        html += `<div>${memos[idx].includes(n) ? n : ''}</div>`;
+    }
+    html += '</div>';
+    cell.innerHTML   = html;
+    cell.dataset.val = ''; // 메모 상태엔 val 없음
+}
+
+// ─────────────────────────────────────────────
+//  되돌리기 (Undo)
+// ─────────────────────────────────────────────
+function undoMove() {
+    if (!history.length) return;
+    const { idx, val, memo } = history.pop();
+    const cell = getCells()[idx];
+    memos[idx] = [...memo];
+    cell.classList.remove('hint-cell');
+
+    if (memo.length > 0) {
+        renderMemo(cell, idx);
+    } else {
+        cell.dataset.val = val;
+        cell.textContent = val;
     }
 
-    function handleInput(num) {
-        if (!selCell || selCell.classList.contains('fixed')) return;
-        const idx = parseInt(selCell.dataset.index);
-        history.push({idx, val: selCell.dataset.val, memo: [...memos[idx]]});
-        if (num === 0) { selCell.dataset.val = ''; selCell.textContent = ''; memos[idx] = []; }
-        else if (isMemo) {
-            if (!selCell.dataset.val) {
-                const mIdx = memos[idx].indexOf(num);
-                if (mIdx > -1) memos[idx].splice(mIdx, 1); else memos[idx].push(num);
-                renderMemo(selCell, idx);
+    markErrors();
+    renderKeypad();
+    if (selCell) selectCell(selCell);
+}
+
+// ─────────────────────────────────────────────
+//  힌트
+// ─────────────────────────────────────────────
+function useHint() {
+    const cells   = getCells();
+    const board   = cells.map(c => parseInt(c.dataset.val) || 0);
+    const solution = board.slice();
+
+    if (!solve(solution)) {
+        document.getElementById('status').textContent = '⚠️ 현재 상태로는 풀 수 없는 퍼즐입니다.';
+        return;
+    }
+
+    // 빈 셀 후보 목록
+    const emptyCells = cells
+        .map((c, i) => i)
+        .filter(i => !cells[i].dataset.val && !cells[i].classList.contains('fixed'));
+
+    if (!emptyCells.length) return;
+
+    // 선택된 셀이 비어있으면 우선 사용
+    let hintIdx;
+    if (selCell && !selCell.dataset.val && !selCell.classList.contains('fixed')) {
+        hintIdx = parseInt(selCell.dataset.index);
+    } else {
+        hintIdx = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    }
+
+    const cell = cells[hintIdx];
+    history.push({ idx: hintIdx, val: '', memo: [...memos[hintIdx]] });
+    memos[hintIdx] = [];
+    cell.dataset.val = solution[hintIdx].toString();
+    cell.textContent = solution[hintIdx];
+    cell.classList.add('hint-cell');
+
+    hintCount++;
+    markErrors();
+    renderKeypad();
+    checkWin();
+    selectCell(cell);
+}
+
+// ─────────────────────────────────────────────
+//  메모 모드 토글
+// ─────────────────────────────────────────────
+function toggleMemoMode() {
+    isMemo = !isMemo;
+    const btn = document.getElementById('memo-btn');
+    btn.textContent = `✏️ 메모 ${isMemo ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', isMemo);
+}
+
+// ─────────────────────────────────────────────
+//  키패드 렌더링
+// ─────────────────────────────────────────────
+function renderKeypad() {
+    const kp = document.getElementById('keypad');
+    kp.innerHTML = '';
+    const counts = Array(10).fill(9);
+    getCells().forEach(c => { if (c.dataset.val) counts[parseInt(c.dataset.val)]--; });
+
+    for (let i = 1; i <= 9; i++) {
+        const key = document.createElement('div');
+        key.className = 'key';
+        if (counts[i] <= 0) key.classList.add('key-done');
+        key.innerHTML = `${i}<span class="remain">×${Math.max(0, counts[i])}</span>`;
+        key.addEventListener('click', () => handleInput(i));
+        kp.appendChild(key);
+    }
+    const del = document.createElement('div');
+    del.className = 'key del';
+    del.textContent = 'DEL';
+    del.addEventListener('click', () => handleInput(0));
+    kp.appendChild(del);
+}
+
+// ─────────────────────────────────────────────
+//  오류 셀 표시
+// ─────────────────────────────────────────────
+function markErrors() {
+    const cells = getCells();
+    cells.forEach(c => c.classList.remove('error'));
+
+    cells.forEach((c, i) => {
+        const num = parseInt(c.dataset.val);
+        if (!num) return;
+        const row  = Math.floor(i / 9), col = i % 9;
+        const bRow = Math.floor(row / 3) * 3, bCol = Math.floor(col / 3) * 3;
+        let conflict = false;
+
+        // 행·열 충돌
+        for (let j = 0; j < 9; j++) {
+            if (j !== col && parseInt(cells[row * 9 + j].dataset.val) === num) conflict = true;
+            if (j !== row && parseInt(cells[j * 9 + col].dataset.val) === num) conflict = true;
+        }
+        // 박스 충돌
+        for (let r = bRow; r < bRow + 3; r++) {
+            for (let c2 = bCol; c2 < bCol + 3; c2++) {
+                if ((r !== row || c2 !== col) && parseInt(cells[r * 9 + c2].dataset.val) === num) conflict = true;
             }
-        } else { selCell.dataset.val = num; selCell.textContent = num; memos[idx] = []; }
-        validate(); renderKeypad(); checkWin(); selectCell(selCell);
-    }
-
-    function renderMemo(cell, idx) {
-        let h = '<div class="memo-grid">'; for(let i=1; i<=9; i++) h += `<div>${memos[idx].includes(i)?i:''}</div>`;
-        cell.innerHTML = h + '</div>';
-    }
-
-    function undoMove() {
-        if (!history.length) return;
-        const last = history.pop(); const cell = document.querySelectorAll('.cell')[last.idx];
-        cell.dataset.val = last.val || '';
-        if (last.val) { cell.textContent = last.val; } else { memos[last.idx] = last.memo; renderMemo(cell, last.idx); }
-        validate(); renderKeypad(); selectCell(cell);
-    }
-
-    function useHint() {
-        if (hints <= 0 || !selCell || selCell.classList.contains('fixed')) return;
-        const idx = parseInt(selCell.dataset.index);
-        selCell.dataset.val = solution[idx]; selCell.textContent = solution[idx]; memos[idx] = [];
-        hints--; document.getElementById('hint-btn').textContent = `💡 힌트 (${hints})`;
-        validate(); renderKeypad(); checkWin(); selectCell(selCell);
-    }
-
-    function validate() {
-        const cells = document.querySelectorAll('.cell'); cells.forEach(c => c.classList.remove('error'));
-        cells.forEach(c => {
-            const val = c.dataset.val; if(!val) return;
-            const idx = parseInt(c.dataset.index), r = Math.floor(idx/9), col = idx%9, br = Math.floor(r/3), bc = Math.floor(col/3);
-            cells.forEach(o => {
-                const oi = parseInt(o.dataset.index); if(idx === oi) return;
-                if((Math.floor(oi/9)===r || oi%9===col || (Math.floor(Math.floor(oi/9)/3)===br && Math.floor((oi%9)/3)===bc)) && val === o.dataset.val) c.classList.add('error');
-            });
-        });
-    }
-
-    function renderKeypad() {
-        const kp = document.getElementById('keypad'); kp.innerHTML = '';
-        const counts = Array(10).fill(9); document.querySelectorAll('.cell').forEach(c => { if(c.dataset.val) counts[c.dataset.val]--; });
-        for (let i = 1; i <= 9; i++) {
-            const key = document.createElement('div'); key.className = 'key'; if(counts[i]<=0) key.classList.add('key-done');
-            key.innerHTML = `${i}<span class="remain">×${counts[i]}</span>`; key.onclick = () => handleInput(i); kp.appendChild(key);
         }
-        const del = document.createElement('div'); del.className = 'key del'; del.textContent = 'DEL'; del.onclick = () => handleInput(0); kp.appendChild(del);
+        if (conflict) c.classList.add('error');
+    });
+}
+
+// ─────────────────────────────────────────────
+//  승리 조건 검증
+// ─────────────────────────────────────────────
+function checkWin() {
+    const cells = getCells();
+
+    // 1. 모든 셀이 채워져야 함
+    if (!cells.every(c => c.dataset.val)) return;
+
+    // 2. 오류 셀이 없어야 함
+    if (cells.some(c => c.classList.contains('error'))) return;
+
+    // 3. 행·열·박스 전체 정합성 확인
+    const board = cells.map(c => parseInt(c.dataset.val));
+    if (!isComplete(board)) return;
+
+    clearInterval(timer); timer = null;
+    const msg = hintCount > 0
+        ? `성공! 🎉 (힌트 ${hintCount}회) ${formatTime(time)}`
+        : `성공! 🎉 ${formatTime(time)}`;
+    document.getElementById('status').textContent = msg;
+    confetti({ particleCount: 150, spread: 80 });
+}
+
+function isComplete(board) {
+    const valid = arr => {
+        const s = new Set(arr);
+        return s.size === 9 && !s.has(0);
+    };
+    for (let i = 0; i < 9; i++) {
+        const row = board.slice(i * 9, i * 9 + 9);
+        const col = [0,1,2,3,4,5,6,7,8].map(j => board[j * 9 + i]);
+        const bR = Math.floor(i / 3) * 3, bC = (i % 3) * 3;
+        const box = [];
+        for (let r = bR; r < bR+3; r++) for (let c = bC; c < bC+3; c++) box.push(board[r*9+c]);
+        if (!valid(row) || !valid(col) || !valid(box)) return false;
     }
+    return true;
+}
 
-    function toggleMemoMode() { isMemo = !isMemo; document.getElementById('memo-btn').textContent = `✏️ 메모 ${isMemo?'ON':'OFF'}`; }
+// ─────────────────────────────────────────────
+//  백트래킹 솔버 (힌트용)
+// ─────────────────────────────────────────────
+function solve(board) {
+    const idx = board.indexOf(0);
+    if (idx === -1) return true;
+    const row = Math.floor(idx / 9), col = idx % 9;
+    const bRow = Math.floor(row / 3) * 3, bCol = Math.floor(col / 3) * 3;
 
-    function checkWin() {
-        const cells = Array.from(document.querySelectorAll('.cell'));
-        if (cells.every(c => c.dataset.val && !c.classList.contains('error'))) {
-            const currentSolution = cells.map(c => c.dataset.val).join('');
-            if (currentSolution === solution) {
-                clearInterval(timer); confetti(); document.getElementById('status').textContent = "🎉 MISSION COMPLETE!";
-                localStorage.setItem(`sdk_${curDiff}_${curIdx}`, 'true');
-            }
+    for (let num = 1; num <= 9; num++) {
+        let ok = true;
+        for (let j = 0; j < 9; j++) {
+            if (board[row * 9 + j] === num) { ok = false; break; }
+            if (board[j * 9 + col] === num) { ok = false; break; }
+        }
+        if (ok) {
+            for (let r = bRow; r < bRow + 3 && ok; r++)
+                for (let c = bCol; c < bCol + 3 && ok; c++)
+                    if (board[r * 9 + c] === num) ok = false;
+        }
+        if (ok) {
+            board[idx] = num;
+            if (solve(board)) return true;
+            board[idx] = 0;
         }
     }
+    return false;
+}
 
-    function sendHeight() { window.parent.postMessage({ sudokuHeight: document.body.scrollHeight + 32 }, '*'); }
-    window.addEventListener('load', sendHeight); window.addEventListener('resize', sendHeight);
+// ─────────────────────────────────────────────
+//  유틸
+// ─────────────────────────────────────────────
+function getCells() { return [...document.querySelectorAll('.cell')]; }
+
+function formatTime(s) {
+    return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+function sendHeight() {
+    window.parent.postMessage({ sudokuHeight: document.body.scrollHeight + 50 }, '*');
+}
+
+// ─────────────────────────────────────────────
+//  키보드 입력 지원
+// ─────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+    if (!document.getElementById('screen-game').classList.contains('active')) return;
+    const n = parseInt(e.key);
+    if (n >= 1 && n <= 9) handleInput(n);
+    else if (e.key === 'Backspace' || e.key === 'Delete') handleInput(0);
+    else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undoMove(); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (!selCell) return;
+        let idx = parseInt(selCell.dataset.index);
+        if (e.key === 'ArrowUp')    idx -= 9;
+        if (e.key === 'ArrowDown')  idx += 9;
+        if (e.key === 'ArrowLeft')  idx -= 1;
+        if (e.key === 'ArrowRight') idx += 1;
+        if (idx >= 0 && idx < 81) selectCell(getCells()[idx]);
+    }
+});
+
+// 초기 높이 전송
+sendHeight();
 </script>
 </body>
 </html>
