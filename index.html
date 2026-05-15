@@ -168,7 +168,6 @@ function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if (id !== 'screen-game') { clearInterval(timer); timer = null; }
-    sendHeight();
 }
 
 function selectDifficulty(diff, label) {
@@ -526,9 +525,7 @@ function formatTime(s) {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
-function sendHeight() {
-    window.parent.postMessage({ sudokuHeight: document.body.scrollHeight + 50 }, '*');
-}
+// ResizeObserver: 높이 변경 시 자동 전송 (화면전환·키패드·상태바 모두 커버)
 
 // ─────────────────────────────────────────────
 //  키보드 입력 지원
@@ -551,8 +548,10 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// 초기 높이 전송
-sendHeight();
+// ResizeObserver: body 크기 변경마다 부모 프레임에 높이 전송
+new ResizeObserver(() => {
+    window.parent.postMessage({ sudokuHeight: document.body.scrollHeight + 20 }, '*');
+}).observe(document.body);
 </script>
 </body>
 </html>
