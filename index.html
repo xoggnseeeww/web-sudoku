@@ -35,7 +35,6 @@
             color: var(--text);
             display: flex; justify-content: center;
             overflow-x: hidden;
-            min-height: 100vh;
         }
 
         .container { max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 14px; }
@@ -662,15 +661,23 @@ document.addEventListener('keydown', e => {
 });
 
 // ===========================
-// TISTORY HEIGHT SYNC
+// TISTORY HEIGHT SYNC (무한루프 방지)
 // ===========================
+let _lastH = 0;
 function sendHeight() {
-    const h = document.querySelector('.container').getBoundingClientRect().height + 48;
-    window.parent.postMessage({ sudokuHeight: Math.ceil(h) }, '*');
+    const el = document.querySelector('.container');
+    if (!el) return;
+    const h = Math.ceil(el.offsetHeight) + 32;
+    if (h === _lastH) return;
+    _lastH = h;
+    window.parent.postMessage({ sudokuHeight: h }, '*');
 }
-window.addEventListener('load', () => { sendHeight(); setTimeout(sendHeight, 500); });
+window.addEventListener('load', () => { sendHeight(); setTimeout(sendHeight, 300); });
 window.addEventListener('resize', sendHeight);
-new MutationObserver(sendHeight).observe(document.body, {attributes:true, childList:true, subtree:true});
+new MutationObserver(sendHeight).observe(
+    document.querySelector('.container'),
+    { childList: true, subtree: true }
+);
 </script>
 </body>
 </html>
